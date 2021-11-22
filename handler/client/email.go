@@ -1,0 +1,82 @@
+package client
+
+import (
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"gopkg.in/gomail.v2"
+	"io"
+	"mri/client-email-sender/models"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+)
+
+func (cl *ClientEmailHandler) SendMessage(c *gin.Context) {
+	var param models.ParamSendMessage
+	_= c.Bind(&param)
+
+	mailer := cl.mailer(param)
+	dialer := cl.dialer()
+
+	go func() {
+		err := dialer.DialAndSend(mailer)
+		if err != nil {
+			fmt.Println(fmt.Sprintf("Error: %v", err.Error()))
+		}
+	}()
+
+	c.JSON(http.StatusOK, models.CommonResponse{
+		Code:      200,
+		IsSuccess: true,
+		Message:   "Email still sending to "+ strings.Join(param.Recipients, ","),
+	})
+}
+
+func downloadFile(filepath string, url string) error {
+
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func (cl *ClientEmailHandler) dialer() *gomail.Dialer {
+	port, _ := strconv.Atoi(cl.CONFIG_SMTP_PORT)
+	dialer := gomail.NewDialer(
+		cl.CONFIG_SMTP_HOST,
+		port,
+		cl.CONFIG_AUTH_EMAIL,
+		cl.CONFIG_AUTH_PASSWORD,
+	)
+	return dialer
+}
+
+func (cl *ClientEmailHandler) mailer(param models.ParamSendMessage) *gomail.Message {
+	mailer := gomail.NewMessage()
+	mailer.SetHeader("From", cl.CONFIG_SENDER_NAME)
+	mailer.SetHeader("To", strings.Join(param.Recipients, ","))
+	if len(param.RecipientsCC) > 0 {
+		mailer.SetAddressHeader("Cc", strings.Join(param.RecipientsCC, ","), "CC From " + cl.CONFIG_SENDER_NAME)
+	}
+	mailer.SetHeader("Subject", param.Subject)
+	mailer.SetBody("text/html", param.Body)
+	if param.Attachment.Url != "" {
+		_= downloadFile("file/" + param.Attachment.Filename, param.Attachment.Url)
+		mailer.Attach("file/" + param.Attachment.Filename)
+	}
+	return mailer
+}
