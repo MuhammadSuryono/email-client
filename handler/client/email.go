@@ -3,18 +3,20 @@ package client
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/kr/pretty"
 	"gopkg.in/gomail.v2"
 	"io"
 	"mri/client-email-sender/models"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 )
 
 func (cl *ClientEmailHandler) SendMessage(c *gin.Context) {
 	var param models.ParamSendMessage
-	_= c.Bind(&param)
+	_ = c.Bind(&param)
+
+	pretty.Println(param)
 
 	mailer := cl.mailer(param)
 	dialer := cl.dialer()
@@ -29,7 +31,7 @@ func (cl *ClientEmailHandler) SendMessage(c *gin.Context) {
 	c.JSON(http.StatusOK, models.CommonResponse{
 		Code:      200,
 		IsSuccess: true,
-		Message:   "Email still sending to "+ strings.Join(param.Recipients, ","),
+		Message:   "Email still sending to " + param.Recipients,
 	})
 }
 
@@ -68,14 +70,14 @@ func (cl *ClientEmailHandler) dialer() *gomail.Dialer {
 func (cl *ClientEmailHandler) mailer(param models.ParamSendMessage) *gomail.Message {
 	mailer := gomail.NewMessage()
 	mailer.SetHeader("From", cl.CONFIG_SENDER_NAME)
-	mailer.SetHeader("To", strings.Join(param.Recipients, ","))
-	if len(param.RecipientsCC) > 0 {
-		mailer.SetAddressHeader("Cc", strings.Join(param.RecipientsCC, ","), "CC From " + cl.CONFIG_SENDER_NAME)
+	mailer.SetHeader("To", param.Recipients)
+	if param.RecipientsCC != "" {
+		mailer.SetAddressHeader("Cc", param.RecipientsCC, "CC From "+cl.CONFIG_SENDER_NAME)
 	}
 	mailer.SetHeader("Subject", param.Subject)
 	mailer.SetBody("text/html", param.Body)
 	if param.Attachment.Url != "" {
-		_= downloadFile("file/" + param.Attachment.Filename, param.Attachment.Url)
+		_ = downloadFile("file/"+param.Attachment.Filename, param.Attachment.Url)
 		mailer.Attach("file/" + param.Attachment.Filename)
 	}
 	return mailer
