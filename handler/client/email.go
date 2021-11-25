@@ -6,27 +6,30 @@ import (
 	"gopkg.in/gomail.v2"
 	"io"
 	"mri/client-email-sender/models"
-	"mri/client-email-sender/utils"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 )
 
 func (cl *ClientEmailHandler) SendMessage(c *gin.Context) {
 	var param models.ParamSendMessage
 	_ = c.Bind(&param)
-
-	mailer := cl.mailer(param)
 	dialer := cl.dialer()
 
 	go func() {
-		err := dialer.DialAndSend(mailer)
-		if err != nil {
-			cl.Log.WriteToDbLog("gomail.v2", param.Subject, param.Recipients, param.Body, param.Attachment.Url, 500, fmt.Sprintf("Error: %v", err), fmt.Sprintf("Error: %v", err))
-			fmt.Println(fmt.Sprintf("Error: %v", err.Error()))
+		splitEmail := strings.Split(param.Recipients, ",")
+		for _, email := range splitEmail {
+			param.Recipients = email
+			mailer := cl.mailer(param)
+			err := dialer.DialAndSend(mailer)
+			if err != nil {
+				cl.Log.WriteToDbLog("gomail.v2", param.Subject, param.Recipients, param.Body, param.Attachment.Url, 500, fmt.Sprintf("Error: %v", err), fmt.Sprintf("Error: %v", err))
+				fmt.Println(fmt.Sprintf("Error: %v", err.Error()))
+			} else {
+				cl.Log.WriteToDbLog("gomail.v2", param.Subject, param.Recipients, param.Body, param.Attachment.Url, 200, fmt.Sprintf("Error: %v", err), fmt.Sprintf("Error: %v", err))
+			}
 		}
-
-		cl.Log.WriteToDbLog("gomail.v2", param.Subject, param.Recipients, param.Body, param.Attachment.Url, 200, fmt.Sprintf("Error: %v", err), fmt.Sprintf("Error: %v", err))
 	}()
 
 	c.JSON(http.StatusOK, models.CommonResponse{
@@ -69,13 +72,11 @@ func (cl *ClientEmailHandler) dialer() *gomail.Dialer {
 }
 
 func (cl *ClientEmailHandler) mailer(param models.ParamSendMessage) *gomail.Message {
-	recipients := utils.SplitRecipientsEmail(param.Recipients)
 	mailer := gomail.NewMessage()
 	mailer.SetHeader("From", cl.CONFIG_SENDER_NAME)
-	mailer.SetHeader("To", recipients)
+	mailer.SetHeader("To", param.Recipients)
 	if param.RecipientsCC != "" {
-		recipientsCC := utils.SplitRecipientsEmail(param.RecipientsCC)
-		mailer.SetAddressHeader("Cc", recipientsCC, param.Subject)
+		mailer.SetAddressHeader("Cc", param.RecipientsCC, param.Subject)
 	}
 	mailer.SetHeader("Subject", param.Subject)
 	mailer.SetBody("text/html", param.Body)
