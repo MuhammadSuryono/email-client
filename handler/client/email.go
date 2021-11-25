@@ -6,6 +6,7 @@ import (
 	"gopkg.in/gomail.v2"
 	"io"
 	"mri/client-email-sender/models"
+	"mri/client-email-sender/utils"
 	"net/http"
 	"os"
 	"strconv"
@@ -68,11 +69,13 @@ func (cl *ClientEmailHandler) dialer() *gomail.Dialer {
 }
 
 func (cl *ClientEmailHandler) mailer(param models.ParamSendMessage) *gomail.Message {
+	recipients := utils.SplitRecipientsEmail(param.Recipients)
 	mailer := gomail.NewMessage()
 	mailer.SetHeader("From", cl.CONFIG_SENDER_NAME)
-	mailer.SetHeader("To", param.Recipients)
+	mailer.SetHeader("To", recipients)
 	if param.RecipientsCC != "" {
-		mailer.SetAddressHeader("Cc", param.RecipientsCC, "CC From "+cl.CONFIG_SENDER_NAME)
+		recipientsCC := utils.SplitRecipientsEmail(param.RecipientsCC)
+		mailer.SetAddressHeader("Cc", recipientsCC, param.Subject)
 	}
 	mailer.SetHeader("Subject", param.Subject)
 	mailer.SetBody("text/html", param.Body)
